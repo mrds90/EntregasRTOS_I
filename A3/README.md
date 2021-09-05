@@ -5,7 +5,7 @@ Ayuda: Se puede consultar el contador de ticks para obtener el tiempo del sistem
 
 ## Descripción
 
-La aplicación enciente los LED1, LED2, LED3 y LED4 el mismo tiempo que se presionó la tecla correspondiente (TEC1, TEC2, TEC3 y TEC4) justo al soltarla.
+La aplicación enciende los LED1, LED2, LED3 y LED4 el mismo tiempo que estuvo presionada la tecla correspondiente (TEC1, TEC2, TEC3 y TEC4) justo al soltarla.
 
 ## Dependences
 ### CIAA Software
