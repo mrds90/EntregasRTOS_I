@@ -33,7 +33,7 @@ para resolverlo sin utilizar Suspend/Resume se llama de forma forzada al schedul
 ```
 #defineconfigUSE_TIME_SLICING     1
 ```
-## Dependences
+## Dependencias
 ### CIAA Software
 El software de la CIAA es necesario para compilar el programa
 El software de la CIAA puede descargarse e instalarse siguiento el siguiente tutorial: [CIAA SOFTWARE TUTORIAL](https://github.com/epernia/software/)
