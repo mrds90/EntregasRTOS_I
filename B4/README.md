@@ -1,14 +1,38 @@
-# A4
+# B4
 
 ## Descripción
 
-Utilizando el ejemplofirmware_v3\examples\c\sapi\uart\rx_interruptimplemente un programa con una tarea:
-- Configura el driver de sapi para que puedan utilizarseinterrupciones para recibir datos via UART.
-- Esperara un paquete que comience con '>' y finalicecon '<'. Al recibirlo:
-  - Una tarea deberá encender un led testigo (lo hace inmediatamente y por 1 segundo).
-  - Pasados 1 segundo de la recepción, deberá enviarse(usando printf) el texto "Recibido".
+Partiendo del ejercicio B.3 implemente un sistemade 4 tareas:
+Tarea A - Prioridad IDLE + 4 - LED asociado LEDB
+Tarea B - Prioridad IDLE + 2 - LED asociado LED1
+Tarea C - Prioridad IDLE + 2 - LED asociado LED2
+Tarea D - Prioridad IDLE + 1 - LED asociado LED3
+Valide que la secuencia es la siguiente.
+
+![alt text](https://github.com/mrds90/EntregasRTOS_I/blob/main/B4/Doc/GraficoTemporal.jpeg?raw=true)
 
 
+Las tareas B y C DEBEN tener un código fuente equivalente(salvando la parte en donde se accede al LED).
+Ahora, configure en freertosconfig.h:
+```
+#defineconfigUSE_TIME_SLICING     0
+```
+¿Qué sucedió?
+
+Proponga una manera de contrarrestar el efecto sin tocar la configuración mencionada (no utilice la Suspend/Resume para solucionarlo)
+### Respuesta
+
+El comportamiento no se valida. Aunque en primera medida parece que si, el tiempo que estan encedidos los LEDs 1 y 2 es el doble (1seg). Esto es lógico porque el delay blockeante (500 ms) de las dos tareas suceden en simultaneao.
+
+Cuando se realiza el cambio del `#defineconfigUSE_TIME_SLICING  0` la secuencia de ejecución es
+
+![alt text](https://github.com/mrds90/EntregasRTOS_I/blob/main/B4/Doc/ComportamientoSinSlicing.png?raw=true)
+
+para resolverlo sin utilizar Suspend/Resume se llama de forma forzada al scheduler con `taskYIELD()`. El comportamiento finalmente es igual al que tenía el sistema con:
+
+```
+#defineconfigUSE_TIME_SLICING     1
+```
 ## Dependences
 ### CIAA Software
 El software de la CIAA es necesario para compilar el programa
@@ -25,21 +49,7 @@ Abrir una terminal en la carpeta donde carga los proyectos dentro de firmware v3
 git clone https://github.com/mrds90/PmC_Actividad3.git
 ```
 ## Compilacion
-### Corregir error en configuración de interrupciones
-En el archivo "libs/lpc_open/lpc_startup/src/vendor_interrupt.c"
 
-existe la condicion para el presprocesador:
-```
-#if __CORTEX_M == 0U
-```
-en la linea 6, reemplace esta sentencia por:
-
-```
-#if 0
-```
-para que las interrupciones por defectos queden definidas como WEAK
-
-### Compilar
 * Abrir la terminal del CIAA launcher e ir a la ruta del firmware v3.
 * Seleccionar el programa con el comando
 ```
