@@ -3,10 +3,16 @@
 ## Descripción
 
 Partiendo del ejercicio B.3 implemente un sistemade 4 tareas:
-Tarea A - Prioridad IDLE + 4 - LED asociado LEDB
-Tarea B - Prioridad IDLE + 2 - LED asociado LED1
-Tarea C - Prioridad IDLE + 2 - LED asociado LED2
-Tarea D - Prioridad IDLE + 1 - LED asociado LED3
+
+- Tarea A - Prioridad IDLE + 4 - LED asociado LEDB
+
+- Tarea B - Prioridad IDLE + 2 - LED asociado LED1
+
+- Tarea C - Prioridad IDLE + 2 - LED asociado LED2
+
+- Tarea D - Prioridad IDLE + 1 - LED asociado LED3
+
+
 Valide que la secuencia es la siguiente.
 
 ![alt text](https://github.com/mrds90/EntregasRTOS_I/blob/main/B4/Doc/GraficoTemporal.jpeg?raw=true)
