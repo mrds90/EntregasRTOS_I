@@ -91,7 +91,8 @@ void task_led( void* taskParmPtr ) {
         BaseType_t led_selector = xQueueReceive(cola_1, &evento, LED_RATE_TICKS);
         if(led_selector == pdTRUE && evento.type == EVENT_KEY_PRESSED) {
             gpioToggle( LED1 );
-            vTaskDelay(evento.value);
+            vTaskDelay(evento.value); //No era requisito del ejercicio que el tiempo de encendido sea el de presionado la tecla.
+            //vTaskDelay(LED_RATE_TICKS); // Linea necesaria si se desea un tiempo de encendido constante
             gpioToggle( LED1 );
             evento.index = LED1;
         }
