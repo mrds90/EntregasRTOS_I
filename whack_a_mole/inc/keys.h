@@ -17,14 +17,13 @@
 /* public macros ================================================================= */
 #define KEYS_INVALID_TIME   -1
 
-
 typedef enum {
     TEC1_INDEX,
     TEC2_INDEX,
     TEC3_INDEX,
     TEC4_INDEX,
 
-    TEC_QTY
+    TEC_QTY,
 } teclas_index_t;
 
 
@@ -61,9 +60,9 @@ typedef struct
 
 typedef struct
 {
-    gpioMap_t     tecla;
-    TickType_t	  event_time;
-    tecla_event_t event_type;
+    teclas_index_t  tecla;
+    TickType_t	    event_time;
+    tecla_event_t   event_type;
 } t_key_isr_signal;
 
 typedef void (*USER_KEYS_EVENT_HANDLER_BUTTON_PRESSED_t)(t_key_isr_signal* event_data , uintptr_t context);
@@ -73,8 +72,8 @@ typedef void (*USER_KEYS_EVENT_HANDLER_BUTTON_RELEASED_t)(t_key_isr_signal* even
 void KEYS_Init(void);
 void KEYS_LoadPressHandler( USER_KEYS_EVENT_HANDLER_BUTTON_PRESSED_t press_handler, uintptr_t this_context );
 void KEYS_LoadReleaseHandler( USER_KEYS_EVENT_HANDLER_BUTTON_RELEASED_t release_handler, uintptr_t this_context );
-TickType_t keys_get_diff( uint32_t index );
-void keys_clear_diff();
+TickType_t KEYS_DiffValue( uint32_t index );
+void KEYS_DiffClear();
 
 
 #endif /* PDM_ANTIRREBOTE_MEF_INC_DEBOUNCE_H_ */

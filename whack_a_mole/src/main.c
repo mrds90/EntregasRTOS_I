@@ -38,8 +38,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "whackamole.h"
 
 
-static void ISR_Punch(t_key_isr_signal *event_data, uintptr_t this_context);
-
 int main( void )
 {
    /* Inicializar la placa */
@@ -48,15 +46,10 @@ int main( void )
    /* inicializo driver de teclas */
    KEYS_Init();
    /* inicializo juego */
-   whackamole_init();
+   WHACKAMOLE_Init();
    /* arranco el scheduler */
    vTaskStartScheduler();
    return 0;
 }
 
 
-static void ISR_Punch(t_key_isr_signal *event_data, uintptr_t this_context) {
-      if(event_data->event_type == TEC_FALL) {
-            gpioToggle(LED1);
-      }
-}

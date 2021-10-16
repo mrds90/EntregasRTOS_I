@@ -23,10 +23,10 @@
 
 
 /*=====[Prototypes (declarations) of private functions]======================*/
-static void keys_isr_config( void );
+static void KEYS_ISRConfig( void );
 
-static void keys_event_handler_button_pressed( t_key_isr_signal* event_data );
-static void keys_event_handler_button_release( t_key_isr_signal* event_data );
+static void KEYS_ISRButonPressed( t_key_isr_signal* event_data );
+static void KEYS_ISRButonReleased( t_key_isr_signal* event_data );
 
 /*=====[Definitions of private global variables]=============================*/
 
@@ -43,7 +43,7 @@ uintptr_t context;
 /*=====[Definitions of public global variables]==============================*/
 
 /*=====[prototype of private functions]=================================*/
-void keys_service_task( void* taskParmPtr );
+void KEYS_Task( void* taskParmPtr );
 
 /*=====[Implementations of public functions]=================================*/
 
@@ -53,7 +53,7 @@ void keys_service_task( void* taskParmPtr );
    @param index
    @return TickType_t
  */
-TickType_t keys_get_diff( uint32_t index )
+TickType_t KEYS_DiffValue( uint32_t index )
 {
     TickType_t tiempo;
 
@@ -69,7 +69,7 @@ TickType_t keys_get_diff( uint32_t index )
 
    @param index
  */
-void keys_clear_diff( uint32_t index )
+void KEYS_DiffClear( uint32_t index )
 {
     taskENTER_CRITICAL();
     keys_data[index].time_diff = 0;
@@ -100,8 +100,8 @@ void KEYS_Init( void ) {
 
     // Crear tareas en freeRTOS
     res = xTaskCreate (
-              keys_service_task,					// Funcion de la tarea a ejecutar
-              ( const char * )"keys_service_task",	// Nombre de la tarea como String amigable para el usuario
+              KEYS_Task,					// Funcion de la tarea a ejecutar
+              ( const char * )"KEYS_Task",	// Nombre de la tarea como String amigable para el usuario
               configMINIMAL_STACK_SIZE*2,	// Cantidad de stack de la tarea
               0,							// Parametros de tarea
               tskIDLE_PRIORITY+1,			// Prioridad de la tarea
@@ -109,7 +109,7 @@ void KEYS_Init( void ) {
           );
 
 
-    keys_isr_config();
+    KEYS_ISRConfig();
 
 
     // Gestión de errores
@@ -131,7 +131,7 @@ void KEYS_LoadReleaseHandler( USER_KEYS_EVENT_HANDLER_BUTTON_RELEASED_t release_
 
    @param index
  */
-void keys_Update_Isr( t_key_isr_signal* event_data )
+void KEYS_ISRUpdate( t_key_isr_signal* event_data )
 {
     uint32_t index = event_data->tecla;
 
@@ -148,7 +148,7 @@ void keys_Update_Isr( t_key_isr_signal* event_data )
                     keys_data[index].state = STATE_BUTTON_DOWN;
 
                     /* ACCION DEL EVENTO !*/
-                    keys_event_handler_button_pressed( event_data );
+                    KEYS_ISRButonPressed( event_data );
                 }
             }
             break;
@@ -165,7 +165,7 @@ void keys_Update_Isr( t_key_isr_signal* event_data )
                     keys_data[index].state = STATE_BUTTON_UP;
 
                     /* ACCION DEL EVENTO !*/
-                    keys_event_handler_button_release( event_data );
+                    KEYS_ISRButonReleased( event_data );
                 }
             }
 
@@ -184,7 +184,7 @@ void keys_Update_Isr( t_key_isr_signal* event_data )
 
    @param event_data
  */
-static void keys_event_handler_button_pressed( t_key_isr_signal* event_data ) {
+static void KEYS_ISRButonPressed( t_key_isr_signal* event_data ) {
     uint32_t index = event_data->tecla;
 
     //internal event
@@ -203,7 +203,7 @@ static void keys_event_handler_button_pressed( t_key_isr_signal* event_data ) {
 
    @param event_data
  */
-static void keys_event_handler_button_release( t_key_isr_signal* event_data )
+static void KEYS_ISRButonReleased( t_key_isr_signal* event_data )
 {
     uint32_t index = event_data->tecla;
 
@@ -225,14 +225,14 @@ static void keys_event_handler_button_release( t_key_isr_signal* event_data )
 
    @param taskParmPtr
  */
-void keys_service_task( void* taskParmPtr )
+void KEYS_Task( void* taskParmPtr )
 {
     t_key_isr_signal event_data;
 
     while( 1 )
     {
         xQueueReceive( isr_queue, &event_data, portMAX_DELAY );
-        keys_Update_Isr( &event_data );
+        KEYS_ISRUpdate( &event_data );
     }
 }
 
@@ -241,8 +241,7 @@ void keys_service_task( void* taskParmPtr )
    @brief   Inicializa las interrupciones asociadas al driver keys.c
 			Se realiza sobre las cuatro teclas de la EDUCIAA
  */
-void keys_isr_config( void )
-{
+void KEYS_ISRConfig( void ) {
     //Inicializamos las interrupciones (LPCopen)
     Chip_PININT_Init( LPC_GPIO_PIN_INT );
 
@@ -302,7 +301,7 @@ void keys_isr_config( void )
 
    @param index
  */
-void keys_isr_fall( uint32_t index, t_key_isr_signal*evnt ) {
+static void KEYS_ISRFall( uint32_t index, t_key_isr_signal*evnt ) {
     evnt->tecla         = index;
     evnt->event_time    = xTaskGetTickCountFromISR();
     evnt->event_type    = TEC_FALL;
@@ -313,7 +312,7 @@ void keys_isr_fall( uint32_t index, t_key_isr_signal*evnt ) {
 
    @param index
  */
-void keys_isr_rise( uint32_t index, t_key_isr_signal*evnt ) {
+static void KEYS_ISRRise( uint32_t index, t_key_isr_signal*evnt ) {
     evnt->tecla         = index;
     evnt->event_time    = xTaskGetTickCountFromISR();
     evnt->event_type    = TEC_RISE;
@@ -331,14 +330,14 @@ void GPIO0_IRQHandler( void ) {  //asociado a tec1
         //Verificamos que la interrupción es la esperada
         Chip_PININT_ClearIntStatus( LPC_GPIO_PIN_INT, PININTCH0 ); //Borramos el flag de interrupción
 
-        keys_isr_fall( TEC1_INDEX, &event_data );
+        KEYS_ISRFall( TEC1_INDEX, &event_data );
         xQueueSendFromISR(  isr_queue, &event_data, &xHigherPriorityTaskWoken );
     }
 
     if ( Chip_PININT_GetRiseStates( LPC_GPIO_PIN_INT ) & PININTCH0 )
     {
         Chip_PININT_ClearIntStatus( LPC_GPIO_PIN_INT, PININTCH0 );
-        keys_isr_rise( TEC1_INDEX, &event_data );
+        KEYS_ISRRise( TEC1_INDEX, &event_data );
         xQueueSendFromISR( isr_queue, &event_data, &xHigherPriorityTaskWoken );
     }
 
@@ -358,14 +357,14 @@ void GPIO1_IRQHandler( void ) {  //asociado a tec1
         //Verificamos que la interrupción es la esperada
         Chip_PININT_ClearIntStatus( LPC_GPIO_PIN_INT, PININTCH1 ); //Borramos el flag de interrupción
 
-        keys_isr_fall( TEC2_INDEX, &event_data );
+        KEYS_ISRFall( TEC2_INDEX, &event_data );
         xQueueSendFromISR( isr_queue, &event_data, &xHigherPriorityTaskWoken );
     }
 
     if ( Chip_PININT_GetRiseStates( LPC_GPIO_PIN_INT ) & PININTCH1 )
     {
         Chip_PININT_ClearIntStatus( LPC_GPIO_PIN_INT, PININTCH1 );
-        keys_isr_rise( TEC2_INDEX, &event_data );
+        KEYS_ISRRise( TEC2_INDEX, &event_data );
         xQueueSendFromISR( isr_queue, &event_data, &xHigherPriorityTaskWoken );
     }
 
@@ -384,14 +383,14 @@ void GPIO2_IRQHandler( void ) {
         //Verificamos que la interrupción es la esperada
         Chip_PININT_ClearIntStatus( LPC_GPIO_PIN_INT, PININTCH2 ); //Borramos el flag de interrupción
 
-        keys_isr_fall( TEC3_INDEX, &event_data );
+        KEYS_ISRFall( TEC3_INDEX, &event_data );
         xQueueSendFromISR( isr_queue, &event_data, &xHigherPriorityTaskWoken );
     }
 
     if ( Chip_PININT_GetRiseStates( LPC_GPIO_PIN_INT ) & PININTCH2 )
     {
         Chip_PININT_ClearIntStatus( LPC_GPIO_PIN_INT, PININTCH2 );
-        keys_isr_rise( TEC3_INDEX, &event_data );
+        KEYS_ISRRise( TEC3_INDEX, &event_data );
         xQueueSendFromISR( isr_queue, &event_data, &xHigherPriorityTaskWoken );
     }
 
@@ -410,14 +409,14 @@ void GPIO3_IRQHandler( void ) {
         //Verificamos que la interrupción es la esperada
         Chip_PININT_ClearIntStatus( LPC_GPIO_PIN_INT, PININTCH3 ); //Borramos el flag de interrupción
 
-        keys_isr_fall( TEC4_INDEX, &event_data );
+        KEYS_ISRFall( TEC4_INDEX, &event_data );
         xQueueSendFromISR( isr_queue, &event_data, &xHigherPriorityTaskWoken );
     }
 
     if ( Chip_PININT_GetRiseStates( LPC_GPIO_PIN_INT ) & PININTCH3 )
     {
         Chip_PININT_ClearIntStatus( LPC_GPIO_PIN_INT, PININTCH3 );
-        keys_isr_rise( TEC4_INDEX, &event_data );
+        KEYS_ISRRise( TEC4_INDEX, &event_data );
         xQueueSendFromISR( isr_queue, &event_data, &xHigherPriorityTaskWoken );
     }
 
