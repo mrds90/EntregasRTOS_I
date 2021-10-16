@@ -1,0 +1,62 @@
+/**
+BSD 3-Clause License
+
+Copyright (c) 2021, Franco Bucafusco, Martin Menendez
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+#include "FreeRTOS.h"
+#include "FreeRTOSConfig.h"
+#include "task.h"
+#include "sapi.h"
+#include "../inc/keys.h"
+#include "keys.h"
+#include "whackamole.h"
+
+
+static void ISR_Punch(t_key_isr_signal *event_data, uintptr_t this_context);
+
+int main( void )
+{
+   /* Inicializar la placa */
+   boardConfig();
+   printf( "Booting Game\n" );
+   /* inicializo driver de teclas */
+   KEYS_Init();
+   /* inicializo juego */
+   whackamole_init();
+   /* arranco el scheduler */
+   vTaskStartScheduler();
+   return 0;
+}
+
+
+static void ISR_Punch(t_key_isr_signal *event_data, uintptr_t this_context) {
+      if(event_data->event_type == TEC_FALL) {
+            gpioToggle(LED1);
+      }
+}
