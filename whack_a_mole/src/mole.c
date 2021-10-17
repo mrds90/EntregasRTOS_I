@@ -107,7 +107,11 @@ void MOLE_ServiceLogic( void* pvParameters ) {
     }
 }
 
-
+void MOLE_Downs(mole_t* moles , uint8_t n_moles) {
+    for(int i = 0; i < n_moles; i++) {
+        gpioWrite(moles[i].led, OFF);
+    }
+}
 /*=====[Implementations of private functions]================================*/
 
 __STATIC_FORCEINLINE int32_t whackamole_points_success( TickType_t tiempo_afuera,TickType_t tiempo_reaccion_usuario ) {

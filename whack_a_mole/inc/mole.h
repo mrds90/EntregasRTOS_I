@@ -46,6 +46,7 @@ typedef enum {
 
 /*=====[Prototypes (declarations) of public functions]=======================*/
 void MOLE_ServiceLogic( void* pvParameters );
+void MOLE_Downs(mole_t* moles , uint8_t n_moles);
 /*=====[C++ - end]===========================================================*/
 
 #ifdef __cplusplus

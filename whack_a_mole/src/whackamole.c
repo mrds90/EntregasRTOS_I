@@ -114,7 +114,7 @@ void WHACKAMOLE_Init() {
     BaseType_t main_logic = xTaskCreate(
             WHACKAMOLE_ServiceLogic,
             (const char *)"WAM",
-            configMINIMAL_STACK_SIZE * 2,
+            configMINIMAL_STACK_SIZE * 3,
             NULL,
             tskIDLE_PRIORITY + 2,
             NULL
@@ -139,8 +139,7 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
     BaseType_t task_return;
     
     wam.state = WAM_STATE_BOOTING;
-    wam.event_queue = xQueueCreate(QUEUE_SIZE,sizeof(print_info_t));
-    configASSERT(wam.event_queue != NULL);
+
     
     wam.print_queue = xQueueCreate(QUEUE_SIZE, sizeof(print_info_t));
     configASSERT( wam.print_queue != NULL );
@@ -154,14 +153,20 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
             NULL
     );
     configASSERT(task_return == pdPASS);
-    
+
     while (1) {
         switch (wam.state) {
             case WAM_STATE_BOOTING: //inicialización del juego
+                wam.event_queue = xQueueCreate(QUEUE_SIZE,sizeof(print_info_t));
+                configASSERT(wam.event_queue != NULL);
                 KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressedOrReleasedInStart, (uintptr_t) &wam.event_queue ); // carga de la interrupción de presionado de tecla
                 KEYS_LoadReleaseHandler( WHACKAMOLE_ISRKeyPressedOrReleasedInStart, (uintptr_t) &wam.event_queue ); // carga de la interrupción de soltado de tecla
+                print_info.event = EVENT_WAKE_UP;
+                print_info.points = 0;
                 xQueueSend(wam.print_queue, &print_info, portMAX_DELAY); // impresión de mensaje de inicio
                 wam.state = WAM_STATE_INIT; // cambio de estado
+
+
             case WAM_STATE_INIT: //!< Estado donde espera que se presione alguna tecla.
                 xQueueReceive( wam.event_queue, &print_info, portMAX_DELAY ); //Con un semaforo era suficiente pero la cola ya la tenia instanciada y no quería crear otro recurso exclusivo para esto.
                 if(xQueueReceive( wam.event_queue, &print_info, WAM_GAME_INIT_DELAY ) == pdFALSE) { //Si no se solto la tecla en WAM_GAME_INIT_DELAY se inicia el juego
@@ -175,7 +180,7 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                         (const char *)"TimeOut",
                         configMINIMAL_STACK_SIZE,
                         (void *) &wam,
-                        tskIDLE_PRIORITY + 1,
+                        tskIDLE_PRIORITY + 2,
                         &task_time_out
                     );
                     task_return = xTaskCreate( // Se Crea tarea que controla el tiempo de juego
@@ -183,7 +188,7 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                         (const char *)"End Control",
                         configMINIMAL_STACK_SIZE,
                         (void *) &wam,
-                        tskIDLE_PRIORITY + 1,
+                        tskIDLE_PRIORITY + 2,
                         &task_end_game
                     );
                     configASSERT(task_return == pdPASS);
@@ -214,16 +219,22 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                 }
                 break;
 
+
             case WAM_STATE_GAMEPLAY:
                 xQueueReceive(wam.event_queue, &print_info ,portMAX_DELAY);
-                wam.points += print_info.points; //Se suman los puntos del mole que se acaba de aparecer
-                print_info.points = wam.points; //Se actualiza el punto para imprimir
-                if (print_info.event != EVENT_MISS) { //Reset del contador de timeout
-                	xSemaphoreGive(wam.semph_time_out);
+                if(wam.state != WAM_STATE_END) {// Cuando el timeout se acabe, se cambia el estado a END y no se debe enviar ese ultimo dato
+                    wam.points += print_info.points; //Se suman los puntos del mole que se acaba de aparecer
+                    print_info.points = wam.points; //Se actualiza el punto para imprimir
+                    if (print_info.event != EVENT_MISS) { //Reset del contador de timeout
+                        xSemaphoreGive(wam.semph_time_out);
+                    }
+                    xQueueSend(wam.print_queue, &print_info, portMAX_DELAY); //Se envia el evento para imprimir por UART
                 }
-                xQueueSend(wam.print_queue, &print_info, portMAX_DELAY); //Se envia el evento para imprimir por UART
                 break;
+
+
             case WAM_STATE_END: //!< Estado final del juego. Se borran los recursos utilizados durante el juego
+                MOLE_Downs(mole, WAM_MOLE_QTY);
                 if (wam.semph_time_out != NULL) {
                     vSemaphoreDelete(wam.semph_time_out);
                     wam.semph_time_out = NULL;
@@ -246,8 +257,9 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                         mole[i].semaphore = NULL;
                     }
                 }
-
+                vQueueDelete(wam.event_queue ); //Se borra la cola de eventos
                 wam.state = WAM_STATE_BOOTING;
+                wam.points = 0; //Se resetean los puntos
                 break;
             default:
                 break;
@@ -264,6 +276,7 @@ void WHACKAMOLE_TimeOutControl(void* taskParmPtr) {
         // time_out_check = xQueueReceive(wam->semph_time_out, &print_info ,WAM_GAMEPLAY_TIMEOUT);
         time_out_check = xSemaphoreTake(wam->semph_time_out, portMAX_DELAY);
         if(time_out_check != pdTRUE) {
+            KEYS_LoadPressHandler( NULL, 0);
             print_info.event = EVENT_GAME_OVER;
             print_info.points = wam->points;
             wam->state = WAM_STATE_END;
@@ -277,10 +290,13 @@ void WHACKAMOLE_EndGame(void* taskParmPtr) {
     print_info_t print_info;
     while (1) {
         vTaskDelay(WAM_GAME_END_DELAY);
+        KEYS_LoadPressHandler( NULL, 0 );
         wack_a_mole_t* wam = (wack_a_mole_t*) taskParmPtr;
+        taskENTER_CRITICAL();
         print_info.event = EVENT_GAME_OVER;
         print_info.points = wam->points;
         wam->state = WAM_STATE_END;
+        taskEXIT_CRITICAL();
         xQueueReset(wam->print_queue);
         xQueueSend(wam->print_queue, &print_info, portMAX_DELAY);
     }
@@ -309,7 +325,7 @@ void WHACKAMOLE_ServicePrint( void* taskParmPtr ) {
                 sprintf( str, "NOTHING THERE! - Score: %i.\r\n", game.points);
                 break;
             case EVENT_GAME_OVER:
-                sprintf( str, "JUEGO TERMINADO: - Score: %i.\r\n", game.points);
+                sprintf( str, "JUEGO TERMINADO - Score: %i.\r\n", game.points);
                 
                 break;
             }
@@ -317,7 +333,6 @@ void WHACKAMOLE_ServicePrint( void* taskParmPtr ) {
         uartWriteString(UART_USB, str);
     }
 }
-
 
 void WHACKAMOLE_ISRKeyPressedInGame (t_key_isr_signal* event_data , uintptr_t context) {
     mole_t * moles = (mole_t*)context;
@@ -343,7 +358,6 @@ void WHACKAMOLE_ISRKeyPressedInGame (t_key_isr_signal* event_data , uintptr_t co
     xSemaphoreGiveFromISR(moles->semaphore, &pxHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
 }
-
 
 void WHACKAMOLE_ISRKeyPressedOrReleasedInStart (t_key_isr_signal* event_data , uintptr_t context) {
     QueueHandle_t* queue = (QueueHandle_t*) context;
