@@ -44,13 +44,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "../inc/keys.h"
 #include "../inc/mole.h"
 #include "../inc/whackamole.h"
+#include "../inc/random.h"
+
 
 
 /* private macros */
 
 #define WAM_GAMEPLAY_TIMEOUT        15000   //gameplay time
 #define WAM_GAME_END_DELAY          20000   //delay to end game
-
+#define WAM_GAME_INIT_DELAY         500    //mole timeout
 #define QUEUE_SIZE                  3
 
 #define MOLE_KEY(x)                 (x) + TEC1
@@ -97,7 +99,7 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
     static TaskHandle_t task_mole[WAM_MOLE_QTY];
     static TaskHandle_t task_time_out = NULL;
     static TaskHandle_t task_end_game = NULL;
-
+    
     print_info_t print_info = {EVENT_WAKE_UP, 0};
     BaseType_t task_return;
     
@@ -126,9 +128,10 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                 xQueueSend(wam.print_queue, &print_info, portMAX_DELAY);
                 wam.state = WAM_STATE_INIT;
             case WAM_STATE_INIT:
-                xQueueReceive( wam.event_queue, &print_info, portMAX_DELAY );
-                if(xQueueReceive( wam.event_queue, &print_info, 500 ) == pdFALSE) {
+                xQueueReceive( wam.event_queue, &print_info, portMAX_DELAY ); //Con un semaforo era suficiente pero la cola ya la tenia instanciada y no quería crear otro recurso
+                if(xQueueReceive( wam.event_queue, &print_info, WAM_GAME_INIT_DELAY ) == pdFALSE) {
                     xQueueReceive( wam.event_queue, &print_info, portMAX_DELAY );
+                    random_seed_freertos();
                     xQueueSend(wam.print_queue, &print_info, portMAX_DELAY);
                     KEYS_LoadReleaseHandler( NULL, 0 );
                     KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressedInGame, (uintptr_t) &mole[0] );

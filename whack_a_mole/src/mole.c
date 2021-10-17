@@ -71,6 +71,7 @@ void MOLE_ServiceLogic( void* pvParameters ) {
     BaseType_t press_check;
     while( 1 ) {
         /* preparo el turno */
+        
         tiempo_aparicion = random( WAM_MOLE_SHOW_MIN_TIME, WAM_MOLE_SHOW_MAX_TIME );
         tiempo_afuera    = random( WAM_MOLE_OUTSIDE_MIN_TIME, WAM_MOLE_OUTSIDE_MAX_TIME );
         press_check = xSemaphoreTake( this_mole->semaphore, pdMS_TO_TICKS(tiempo_aparicion));
