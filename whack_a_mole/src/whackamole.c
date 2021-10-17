@@ -90,6 +90,7 @@ typedef struct {
     gpioMap_t           key;
     gpioMap_t           led;                //led asociado al mole
     xSemaphoreHandle    semaphore;          //semaforo para controlar el acceso al mole
+    xQueueHandle        report_queue;       //Cola por donde reporta lo sucedido
     TickType_t          last_time;          //ultima vez que se golpeo el mole
     //otros recursos para cada mole
 } mole_t;
@@ -114,7 +115,7 @@ static void WHACKAMOLE_ISRKeyPressed (t_key_isr_signal* event_data , uintptr_t c
 /* global objects  */
 
 static mole_t mole[WAM_MOLE_QTY];
-static wack_a_mole_t wam;
+
  
 
 /**
@@ -122,7 +123,7 @@ static wack_a_mole_t wam;
 
  */
 void WHACKAMOLE_Init() {
-    BaseType_t res[WAM_MOLE_QTY];
+    
     BaseType_t main_logic = xTaskCreate(
             WHACKAMOLE_ServiceLogic,
             (const char *)"WAM",
@@ -133,24 +134,7 @@ void WHACKAMOLE_Init() {
     );
     configASSERT(main_logic == pdPASS);
     
-    for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
-        mole[i].key = MOLE_KEY(i);
-        mole[i].led = MOLE_LED(i);
-        mole[i].semaphore = xSemaphoreCreateBinary();
-        configASSERT(mole[i].semaphore != NULL);
-        mole[i].last_time = 0;
-        res[i] = xTaskCreate(
-            MOLE_ServiceLogic,
-            (const char *)"MOLE",
-            configMINIMAL_STACK_SIZE,
-            (void *) &mole[i],
-            tskIDLE_PRIORITY + 1,
-            NULL
-        );
-        configASSERT(res[i] == pdPASS);
-    }
-
-    KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressed, (uintptr_t) &mole[0] );
+    
 
 }
 
@@ -190,21 +174,43 @@ __STATIC_FORCEINLINE uint32_t whackamole_points_no_mole(void) {
    @param pvParameters
  */
 static void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
+    static wack_a_mole_t wam;
     BaseType_t game_continue;
     print_info_t print_info;
     wam.event_queue = xQueueCreate(QUEUE_SIZE,sizeof(print_info_t));
     configASSERT(wam.event_queue != NULL);
     wam.print_queue = xQueueCreate(QUEUE_SIZE, sizeof(print_info_t));
     configASSERT( wam.print_queue != NULL );
-    BaseType_t res = xTaskCreate(
+    BaseType_t prt = xTaskCreate(
             WHACKAMOLE_ServicePrint,
             (const char *)"Print",
             configMINIMAL_STACK_SIZE * 5,
-            NULL,
+            (void*) wam.print_queue,
             tskIDLE_PRIORITY + 1,
             NULL
     );
-    configASSERT(res == pdPASS);
+    configASSERT(prt == pdPASS);
+    BaseType_t res[WAM_MOLE_QTY];
+    for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
+        mole[i].key = MOLE_KEY(i);
+        mole[i].led = MOLE_LED(i);
+        mole[i].semaphore = xSemaphoreCreateBinary();
+        mole[i].report_queue = wam.event_queue;
+        configASSERT(mole[i].semaphore != NULL);
+        mole[i].last_time = 0;
+        res[i] = xTaskCreate(
+            MOLE_ServiceLogic,
+            (const char *)"MOLE",
+            configMINIMAL_STACK_SIZE,
+            (void *) &mole[i],
+            tskIDLE_PRIORITY + 1,
+            NULL
+        );
+        configASSERT(res[i] == pdPASS);
+    }
+
+    KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressed, (uintptr_t) &mole[0] );
+    
     while (1) {
 
         game_continue = xQueueReceive(wam.event_queue, &print_info ,WAM_GAMEPLAY_TIMEOUT);
@@ -262,15 +268,16 @@ void MOLE_ServiceLogic( void* pvParameters ) {
             /* el mole, se vuelve a ocultar */
             gpioWrite( this_mole->led, OFF );
         }
-    xQueueSend(wam.event_queue,&print_info,portMAX_DELAY);
+    xQueueSend(this_mole->report_queue,&print_info,portMAX_DELAY);
     }
 }
 
 void WHACKAMOLE_ServicePrint( void* taskParmPtr ) {
+    xQueueHandle print_queue = (xQueueHandle) taskParmPtr;
     print_info_t game;
     char str[100];
     while( 1 ) {
-        xQueueReceive(wam.print_queue, &game, portMAX_DELAY);
+        xQueueReceive(print_queue, &game, portMAX_DELAY);
         switch (game.event) {
             case EVENT_WAKE_UP:
                 sprintf( str, "Presione cualquier tecla por un rato r\n");
