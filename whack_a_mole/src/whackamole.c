@@ -49,6 +49,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* private macros */
 
 #define WAM_GAMEPLAY_TIMEOUT        15000   //gameplay time
+#define WAM_GAME_END_DELAY          20000   //delay to end game
 
 #define QUEUE_SIZE                  3
 
@@ -60,11 +61,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 /* private prototypes */
-void WHACKAMOLE_ServiceLogic( void * pvParameters );
-void WHACKAMOLE_TimeOutControl(void* taskParmPtr);
-void WHACKAMOLE_ServicePrint( void* taskParmPtr );
-void WHACKAMOLE_ISRKeyPressedInGame (t_key_isr_signal* event_data , uintptr_t context);
-void WHACKAMOLE_ISRKeyPressedOrReleasedInStart (t_key_isr_signal* event_data , uintptr_t context);
+static void WHACKAMOLE_ServiceLogic( void * pvParameters );
+static void WHACKAMOLE_TimeOutControl(void* taskParmPtr);
+static void WHACKAMOLE_EndGame(void* taskParmPtr);
+static void WHACKAMOLE_ServicePrint( void* taskParmPtr );
+static void WHACKAMOLE_ISRKeyPressedInGame (t_key_isr_signal* event_data , uintptr_t context);
+static void WHACKAMOLE_ISRKeyPressedOrReleasedInStart (t_key_isr_signal* event_data , uintptr_t context);
  
 
 /**
@@ -94,6 +96,8 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
     static mole_t mole[WAM_MOLE_QTY];
     static TaskHandle_t task_mole[WAM_MOLE_QTY];
     static TaskHandle_t task_time_out = NULL;
+    static TaskHandle_t task_end_game = NULL;
+
     print_info_t print_info = {EVENT_WAKE_UP, 0};
     BaseType_t task_return;
     
@@ -136,6 +140,14 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                         tskIDLE_PRIORITY + 1,
                         &task_time_out
                     );
+                    task_return = xTaskCreate(
+                        WHACKAMOLE_EndGame,
+                        (const char *)"End Control",
+                        configMINIMAL_STACK_SIZE,
+                        (void *) &wam,
+                        tskIDLE_PRIORITY + 1,
+                        &task_end_game
+                    );
                     configASSERT(task_return == pdPASS);
 
                     for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
@@ -174,12 +186,29 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                 xQueueSend(wam.print_queue, &print_info, portMAX_DELAY);
                 break;
             case WAM_STATE_END:
-                vQueueDelete(wam.queue_time_out);
-                vTaskDelete(task_time_out);
-                for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
-                    vTaskDelete(task_mole[i]);
-                    vSemaphoreDelete(mole[i].semaphore);
+                if (wam.queue_time_out != NULL) {
+                    vQueueDelete(wam.queue_time_out);
+                    wam.queue_time_out = NULL;
                 }
+                if (task_time_out != NULL) {
+                    vTaskDelete(task_time_out);
+                    task_time_out = NULL;
+                }
+                if (task_end_game != NULL) {
+                    vTaskDelete(task_end_game);
+                    task_end_game = NULL;
+                }
+                for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
+                    if (task_mole[i] != NULL) {
+                        vTaskDelete(task_mole[i]);
+                        task_mole[i] = NULL;
+                    }
+                    if(mole[i].semaphore != NULL) {
+                        vSemaphoreDelete(mole[i].semaphore);
+                        mole[i].semaphore = NULL;
+                    }
+                }
+
                 wam.state = WAM_STATE_BOOTING;
                 break;
             default:
@@ -205,6 +234,19 @@ void WHACKAMOLE_TimeOutControl(void* taskParmPtr) {
     }
 }
 
+void WHACKAMOLE_EndGame(void* taskParmPtr) {
+    print_info_t print_info;
+    while (1) {
+        vTaskDelay(WAM_GAME_END_DELAY);
+        wack_a_mole_t* wam = (wack_a_mole_t*) taskParmPtr;
+        print_info.event = EVENT_GAME_OVER;
+        print_info.points = wam->points;
+        wam->state = WAM_STATE_END;
+        xQueueReset(wam->print_queue);
+        xQueueSend(wam->print_queue, &print_info, portMAX_DELAY);
+    }
+    
+}
 void WHACKAMOLE_ServicePrint( void* taskParmPtr ) {
     QueueHandle_t print_queue = (QueueHandle_t) taskParmPtr;
     print_info_t game;
