@@ -40,6 +40,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "../inc/FreeRTOSConfig.h"
 #include "task.h"
 #include "queue.h"
+#include "semphr.h"
+
 
 #include "../inc/keys.h"
 #include "../inc/mole.h"
@@ -114,7 +116,7 @@ void WHACKAMOLE_Init() {
             (const char *)"WAM",
             configMINIMAL_STACK_SIZE * 2,
             NULL,
-            tskIDLE_PRIORITY + 1,
+            tskIDLE_PRIORITY + 2,
             NULL
     );
     configASSERT(main_logic == pdPASS);
@@ -319,7 +321,7 @@ void WHACKAMOLE_ServicePrint( void* taskParmPtr ) {
 
 void WHACKAMOLE_ISRKeyPressedInGame (t_key_isr_signal* event_data , uintptr_t context) {
     mole_t * moles = (mole_t*)context;
-    
+    BaseType_t pxHigherPriorityTaskWoken  = pdFALSE;
     switch (event_data->tecla) {
         case TEC1_INDEX:
             moles += WAM_MOLE_1;
@@ -337,7 +339,9 @@ void WHACKAMOLE_ISRKeyPressedInGame (t_key_isr_signal* event_data , uintptr_t co
     taskENTER_CRITICAL();
     moles->last_time = tickRead();
     taskEXIT_CRITICAL();
-    xSemaphoreGive(moles->semaphore);
+    
+    xSemaphoreGiveFromISR(moles->semaphore, &pxHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
 }
 
 
