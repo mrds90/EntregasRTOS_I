@@ -63,7 +63,7 @@ typedef struct {
     int16_t            points;
     QueueHandle_t      print_queue;
     QueueHandle_t      event_queue;
-    QueueHandle_t      queue_time_out;
+    SemaphoreHandle_t  semph_time_out;
 
 } wack_a_mole_t;
 

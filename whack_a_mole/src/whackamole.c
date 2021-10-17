@@ -63,11 +63,43 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 /* private prototypes */
+/**
+ * @brief Rutina principal del juego. Tarea infinita con todos los estados del juego.
+ * 
+ * @param pvParameters 
+ */
 static void WHACKAMOLE_ServiceLogic( void * pvParameters );
+/**
+ * @brief Tarea que controla el tiempo de no presionado de las teclas durante el juego.
+ * 
+ * @param taskParmPtr 
+ */
 static void WHACKAMOLE_TimeOutControl(void* taskParmPtr);
+/**
+ * @brief Tarea que controla cuando finaliza el juego.
+ * 
+ * @param taskParmPtr 
+ */
 static void WHACKAMOLE_EndGame(void* taskParmPtr);
+/**
+ * @brief Tarea para imprimir en la pantalla.
+ * 
+ * @param taskParmPtr 
+ */
 static void WHACKAMOLE_ServicePrint( void* taskParmPtr );
+/**
+ * @brief Tarea de interrupción que gestiona los eventos de presionado de teclas durante el juego.
+ * 
+ * @param event_data 
+ * @param context 
+ */
 static void WHACKAMOLE_ISRKeyPressedInGame (t_key_isr_signal* event_data , uintptr_t context);
+/**
+ * @brief Tarea de interrupción que gestiona los eventos de presionado y soltado de tecla para iniciar el juego.
+ * 
+ * @param event_data 
+ * @param context 
+ */
 static void WHACKAMOLE_ISRKeyPressedOrReleasedInStart (t_key_isr_signal* event_data , uintptr_t context);
  
 
@@ -94,6 +126,7 @@ void WHACKAMOLE_Init() {
    @param pvParameters
  */
 void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
+    /*Inicialización de los recursos permanentes del juego*/
     static wack_a_mole_t wam;
     static mole_t mole[WAM_MOLE_QTY];
     static TaskHandle_t task_mole[WAM_MOLE_QTY];
@@ -122,20 +155,20 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
     
     while (1) {
         switch (wam.state) {
-            case WAM_STATE_BOOTING:
-                KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressedOrReleasedInStart, (uintptr_t) &wam.event_queue );
-                KEYS_LoadReleaseHandler( WHACKAMOLE_ISRKeyPressedOrReleasedInStart, (uintptr_t) &wam.event_queue );
-                xQueueSend(wam.print_queue, &print_info, portMAX_DELAY);
-                wam.state = WAM_STATE_INIT;
-            case WAM_STATE_INIT:
-                xQueueReceive( wam.event_queue, &print_info, portMAX_DELAY ); //Con un semaforo era suficiente pero la cola ya la tenia instanciada y no quería crear otro recurso
-                if(xQueueReceive( wam.event_queue, &print_info, WAM_GAME_INIT_DELAY ) == pdFALSE) {
-                    xQueueReceive( wam.event_queue, &print_info, portMAX_DELAY );
-                    random_seed_freertos();
-                    xQueueSend(wam.print_queue, &print_info, portMAX_DELAY);
-                    KEYS_LoadReleaseHandler( NULL, 0 );
-                    KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressedInGame, (uintptr_t) &mole[0] );
-                    task_return = xTaskCreate(
+            case WAM_STATE_BOOTING: //inicialización del juego
+                KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressedOrReleasedInStart, (uintptr_t) &wam.event_queue ); // carga de la interrupción de presionado de tecla
+                KEYS_LoadReleaseHandler( WHACKAMOLE_ISRKeyPressedOrReleasedInStart, (uintptr_t) &wam.event_queue ); // carga de la interrupción de soltado de tecla
+                xQueueSend(wam.print_queue, &print_info, portMAX_DELAY); // impresión de mensaje de inicio
+                wam.state = WAM_STATE_INIT; // cambio de estado
+            case WAM_STATE_INIT: //!< Estado donde espera que se presione alguna tecla.
+                xQueueReceive( wam.event_queue, &print_info, portMAX_DELAY ); //Con un semaforo era suficiente pero la cola ya la tenia instanciada y no quería crear otro recurso exclusivo para esto.
+                if(xQueueReceive( wam.event_queue, &print_info, WAM_GAME_INIT_DELAY ) == pdFALSE) { //Si no se solto la tecla en WAM_GAME_INIT_DELAY se inicia el juego
+                    xQueueReceive( wam.event_queue, &print_info, portMAX_DELAY ); //Se espera a que se solte la tecla definitivamente
+                    random_seed_freertos(); //Se inicializa la semilla del generador de números aleatorios
+                    xQueueSend(wam.print_queue, &print_info, portMAX_DELAY); //Se envia el evento de inicio de juego para imprimir por UART
+                    KEYS_LoadReleaseHandler( NULL, 0 ); //Se desactiva la interrupción de teclado de Release
+                    KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressedInGame, (uintptr_t) &mole[0] ); //Se actualiza la interrupción de teclado de Press
+                    task_return = xTaskCreate( // Se Crea tarea que controla el Time Out por no presionar teclas
                         WHACKAMOLE_TimeOutControl,
                         (const char *)"TimeOut",
                         configMINIMAL_STACK_SIZE,
@@ -143,7 +176,7 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                         tskIDLE_PRIORITY + 1,
                         &task_time_out
                     );
-                    task_return = xTaskCreate(
+                    task_return = xTaskCreate( // Se Crea tarea que controla el tiempo de juego
                         WHACKAMOLE_EndGame,
                         (const char *)"End Control",
                         configMINIMAL_STACK_SIZE,
@@ -153,7 +186,7 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                     );
                     configASSERT(task_return == pdPASS);
 
-                    for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
+                    for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) { //Se inicializan las moles
                         mole[i].key = MOLE_KEY(i);
                         mole[i].led = MOLE_LED(i);
                         
@@ -163,7 +196,7 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                         mole[i].report_queue = wam.event_queue; //Observar que aca se igualan estas colas. Para lograr encapsular y evitar la sentencia "extern".
                         mole[i].last_time = 0;
                     
-                        task_return = xTaskCreate(
+                        task_return = xTaskCreate( //Se crea tarea que controla cada mole
                             MOLE_ServiceLogic,
                             (const char *)"MOLE",
                             configMINIMAL_STACK_SIZE ,
@@ -173,25 +206,25 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                         );
                         configASSERT(task_return == pdPASS);
                     }
-                    wam.queue_time_out = xQueueCreate(QUEUE_SIZE, sizeof(print_info_t));
-                    configASSERT(wam.queue_time_out != NULL);
+                    wam.semph_time_out = xSemaphoreCreateBinary(); //Se crea cola para controlar el tiempo de timeout
+                    configASSERT(wam.semph_time_out != NULL);
                     wam.state = WAM_STATE_GAMEPLAY;
                 }
                 break;
 
             case WAM_STATE_GAMEPLAY:
                 xQueueReceive(wam.event_queue, &print_info ,portMAX_DELAY);
-                wam.points += print_info.points;
-                print_info.points = wam.points;
-                if (print_info.event != EVENT_MISS) {
-                    xQueueSend(wam.queue_time_out, &print_info, portMAX_DELAY);
+                wam.points += print_info.points; //Se suman los puntos del mole que se acaba de aparecer
+                print_info.points = wam.points; //Se actualiza el punto para imprimir
+                if (print_info.event != EVENT_MISS) { //Reset del contador de timeout
+                	xSemaphoreGive(wam.semph_time_out);
                 }
-                xQueueSend(wam.print_queue, &print_info, portMAX_DELAY);
+                xQueueSend(wam.print_queue, &print_info, portMAX_DELAY); //Se envia el evento para imprimir por UART
                 break;
-            case WAM_STATE_END:
-                if (wam.queue_time_out != NULL) {
-                    vQueueDelete(wam.queue_time_out);
-                    wam.queue_time_out = NULL;
+            case WAM_STATE_END: //!< Estado final del juego. Se borran los recursos utilizados durante el juego
+                if (wam.semph_time_out != NULL) {
+                    vSemaphoreDelete(wam.semph_time_out);
+                    wam.semph_time_out = NULL;
                 }
                 if (task_time_out != NULL) {
                     vTaskDelete(task_time_out);
@@ -226,7 +259,8 @@ void WHACKAMOLE_TimeOutControl(void* taskParmPtr) {
     wack_a_mole_t* wam = (wack_a_mole_t*) taskParmPtr;
     
     while (1) {
-        time_out_check = xQueueReceive(wam->queue_time_out, &print_info ,WAM_GAMEPLAY_TIMEOUT);
+        // time_out_check = xQueueReceive(wam->semph_time_out, &print_info ,WAM_GAMEPLAY_TIMEOUT);
+        time_out_check = xSemaphoreTake(wam->semph_time_out, portMAX_DELAY);
         if(time_out_check != pdTRUE) {
             print_info.event = EVENT_GAME_OVER;
             print_info.points = wam->points;

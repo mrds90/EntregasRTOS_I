@@ -72,10 +72,10 @@ void MOLE_ServiceLogic( void* pvParameters ) {
     while( 1 ) {
         /* preparo el turno */
         
-        tiempo_aparicion = random( WAM_MOLE_SHOW_MIN_TIME, WAM_MOLE_SHOW_MAX_TIME );
-        tiempo_afuera    = random( WAM_MOLE_OUTSIDE_MIN_TIME, WAM_MOLE_OUTSIDE_MAX_TIME );
-        press_check = xSemaphoreTake( this_mole->semaphore, pdMS_TO_TICKS(tiempo_aparicion));
-        if (press_check == pdTRUE) {
+        tiempo_aparicion = random( WAM_MOLE_SHOW_MIN_TIME, WAM_MOLE_SHOW_MAX_TIME ); // tiempo de aparicion aleatorio
+        tiempo_afuera    = random( WAM_MOLE_OUTSIDE_MIN_TIME, WAM_MOLE_OUTSIDE_MAX_TIME ); // tiempo de afuera aleatorio
+        press_check = xSemaphoreTake( this_mole->semaphore, pdMS_TO_TICKS(tiempo_aparicion)); // veo si el usuario apreta el boton sin mole activo (el handler de presionado de la tecla da este semaforo)
+        if (press_check == pdTRUE) { // si el usuario apreto antes de que aparezca el mole
             /*golpeo cuando no hay mole*/
             print_info.points = whackamole_points_no_mole();
             print_info.event = EVENT_FAIL;
@@ -83,22 +83,22 @@ void MOLE_ServiceLogic( void* pvParameters ) {
         else {
             tiempo_aparicion = tickRead(); //tiempo actual (reciclo variable)
             /* muestro el mole */
-            gpioWrite(this_mole->led, ON);
-            press_check = xSemaphoreTake(this_mole->semaphore, pdMS_TO_TICKS(tiempo_afuera));
-            if (press_check == pdTRUE) {
+            gpioWrite(this_mole->led, ON); // enciendo el led del mole
+            press_check = xSemaphoreTake(this_mole->semaphore, pdMS_TO_TICKS(tiempo_afuera)); // espero a que el usuario apriete (el handler de presionado de la tecla da este semaforo)
+            if (press_check == pdTRUE) { // si el usuario acerto al mole
                 /*golpeo cuando hay mole*/
-                print_info.points = whackamole_points_success(tiempo_afuera,  this_mole->last_time - tiempo_aparicion);
-                print_info.event = EVENT_HIT;
+                print_info.points = whackamole_points_success(tiempo_afuera,  this_mole->last_time - tiempo_aparicion); // calculo los puntos
+                print_info.event = EVENT_HIT; // marco el evento
             }
             else {
                 /* no golpeo cuando hay mole */
-                print_info.points = whackamole_points_miss();
-                print_info.event = EVENT_MISS;
+                print_info.points = whackamole_points_miss(); // calculo los puntos
+                print_info.event = EVENT_MISS; // marco el evento
             }
             /* el mole, se vuelve a ocultar */
-            gpioWrite( this_mole->led, OFF );
+            gpioWrite( this_mole->led, OFF ); // apago el led del mole
         }
-    xQueueSend(this_mole->report_queue,&print_info,portMAX_DELAY);
+    xQueueSend(this_mole->report_queue,&print_info,portMAX_DELAY); // envio el reporte al report_queue que lo procesa la tarea principal en el estado WAM_STATE_GAMEPLAY
     }
 }
 
