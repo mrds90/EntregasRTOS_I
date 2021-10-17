@@ -108,9 +108,11 @@ void MOLE_ServiceLogic( void* pvParameters ) {
 }
 
 void MOLE_Downs(mole_t* moles , uint8_t n_moles) {
+    taskENTER_CRITICAL();
     for(int i = 0; i < n_moles; i++) {
         gpioWrite(moles[i].led, OFF);
     }
+    taskEXIT_CRITICAL();
 }
 /*=====[Implementations of private functions]================================*/
 

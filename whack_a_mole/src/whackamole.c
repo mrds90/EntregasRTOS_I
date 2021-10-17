@@ -194,24 +194,30 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                     configASSERT(task_return == pdPASS);
 
                     for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) { //Se inicializan las moles
-                        mole[i].key = MOLE_KEY(i);
-                        mole[i].led = MOLE_LED(i);
+#ifdef TEC_2_BROKEN         
+                        if (i != WAM_MOLE_2) {
+#endif
+                            mole[i].key = MOLE_KEY(i);
+                            mole[i].led = MOLE_LED(i);
+                            
+                            mole[i].semaphore = xSemaphoreCreateBinary();
+                            configASSERT(mole[i].semaphore != NULL);
+                            
+                            mole[i].report_queue = wam.event_queue; //Observar que aca se igualan estas colas. Para lograr encapsular y evitar la sentencia "extern".
+                            mole[i].last_time = 0;
                         
-                        mole[i].semaphore = xSemaphoreCreateBinary();
-                        configASSERT(mole[i].semaphore != NULL);
-                        
-                        mole[i].report_queue = wam.event_queue; //Observar que aca se igualan estas colas. Para lograr encapsular y evitar la sentencia "extern".
-                        mole[i].last_time = 0;
-                    
-                        task_return = xTaskCreate( //Se crea tarea que controla cada mole
-                            MOLE_ServiceLogic,
-                            (const char *)"MOLE",
-                            configMINIMAL_STACK_SIZE ,
-                            (void *) &mole[i],
-                            tskIDLE_PRIORITY + 1,
-                            &task_mole[i]
-                        );
-                        configASSERT(task_return == pdPASS);
+                            task_return = xTaskCreate( //Se crea tarea que controla cada mole
+                                MOLE_ServiceLogic,
+                                (const char *)"MOLE",
+                                configMINIMAL_STACK_SIZE ,
+                                (void *) &mole[i],
+                                tskIDLE_PRIORITY + 1,
+                                &task_mole[i]
+                            );
+                            configASSERT(task_return == pdPASS);
+#ifdef TEC_2_BROKEN 
+                        }
+#endif
                     }
                     wam.semph_time_out = xSemaphoreCreateBinary(); //Se crea cola para controlar el tiempo de timeout
                     configASSERT(wam.semph_time_out != NULL);
