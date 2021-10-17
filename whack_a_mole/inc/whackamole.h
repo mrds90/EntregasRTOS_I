@@ -52,6 +52,7 @@ typedef struct {
 } print_info_t;
 
 typedef enum {
+    WAM_STATE_BOOTING,
     WAM_STATE_INIT,
     WAM_STATE_GAMEPLAY,
     WAM_STATE_END

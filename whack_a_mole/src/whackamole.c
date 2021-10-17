@@ -48,7 +48,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* private macros */
 
-#define WAM_GAMEPLAY_TIMEOUT        2000//15000   //gameplay time
+#define WAM_GAMEPLAY_TIMEOUT        15000   //gameplay time
 
 #define QUEUE_SIZE                  3
 
@@ -63,8 +63,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 void WHACKAMOLE_ServiceLogic( void * pvParameters );
 void WHACKAMOLE_TimeOutControl(void* taskParmPtr);
 void WHACKAMOLE_ServicePrint( void* taskParmPtr );
-void WHACKAMOLE_ISRKeyPressed (t_key_isr_signal* event_data , uintptr_t context);
-
+void WHACKAMOLE_ISRKeyPressedInGame (t_key_isr_signal* event_data , uintptr_t context);
+void WHACKAMOLE_ISRKeyPressedOrReleasedInStart (t_key_isr_signal* event_data , uintptr_t context);
  
 
 /**
@@ -94,9 +94,10 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
     static mole_t mole[WAM_MOLE_QTY];
     static TaskHandle_t task_mole[WAM_MOLE_QTY];
     static TaskHandle_t task_time_out = NULL;
-    print_info_t print_info;
+    print_info_t print_info = {EVENT_WAKE_UP, 0};
     BaseType_t task_return;
     
+    wam.state = WAM_STATE_BOOTING;
     wam.event_queue = xQueueCreate(QUEUE_SIZE,sizeof(print_info_t));
     configASSERT(wam.event_queue != NULL);
     
@@ -115,64 +116,74 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
     
     while (1) {
         switch (wam.state) {
-        case WAM_STATE_INIT:
-            
-            KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressed, (uintptr_t) &mole[0] );
-            task_return = xTaskCreate(
-                WHACKAMOLE_TimeOutControl,
-                (const char *)"TimeOut",
-                configMINIMAL_STACK_SIZE,
-                (void *) &wam,
-                tskIDLE_PRIORITY + 1,
-                &task_time_out
-            );
-            configASSERT(task_return == pdPASS);
+            case WAM_STATE_BOOTING:
+                KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressedOrReleasedInStart, (uintptr_t) &wam.event_queue );
+                KEYS_LoadReleaseHandler( WHACKAMOLE_ISRKeyPressedOrReleasedInStart, (uintptr_t) &wam.event_queue );
+                xQueueSend(wam.print_queue, &print_info, portMAX_DELAY);
+                wam.state = WAM_STATE_INIT;
+            case WAM_STATE_INIT:
+                xQueueReceive( wam.event_queue, &print_info, portMAX_DELAY );
+                if(xQueueReceive( wam.event_queue, &print_info, 500 ) == pdFALSE) {
+                    xQueueReceive( wam.event_queue, &print_info, portMAX_DELAY );
+                    xQueueSend(wam.print_queue, &print_info, portMAX_DELAY);
+                    KEYS_LoadReleaseHandler( NULL, 0 );
+                    KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressedInGame, (uintptr_t) &mole[0] );
+                    task_return = xTaskCreate(
+                        WHACKAMOLE_TimeOutControl,
+                        (const char *)"TimeOut",
+                        configMINIMAL_STACK_SIZE,
+                        (void *) &wam,
+                        tskIDLE_PRIORITY + 1,
+                        &task_time_out
+                    );
+                    configASSERT(task_return == pdPASS);
 
-            for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
-                mole[i].key = MOLE_KEY(i);
-                mole[i].led = MOLE_LED(i);
-                
-                mole[i].semaphore = xSemaphoreCreateBinary();
-                configASSERT(mole[i].semaphore != NULL);
-                
-                mole[i].report_queue = wam.event_queue; //Observar que aca se igualan estas colas. Para lograr encapsular y evitar la sentencia "extern".
-                mole[i].last_time = 0;
-            
-                task_return = xTaskCreate(
-                    MOLE_ServiceLogic,
-                    (const char *)"MOLE",
-                    configMINIMAL_STACK_SIZE ,
-                    (void *) &mole[i],
-                    tskIDLE_PRIORITY + 1,
-                    &task_mole[i]
-                );
-                configASSERT(task_return == pdPASS);
-            }
-            wam.queue_time_out = xQueueCreate(QUEUE_SIZE, sizeof(print_info_t));
-            configASSERT(wam.queue_time_out != NULL);
-            wam.state = WAM_STATE_GAMEPLAY;
-            break;
+                    for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
+                        mole[i].key = MOLE_KEY(i);
+                        mole[i].led = MOLE_LED(i);
+                        
+                        mole[i].semaphore = xSemaphoreCreateBinary();
+                        configASSERT(mole[i].semaphore != NULL);
+                        
+                        mole[i].report_queue = wam.event_queue; //Observar que aca se igualan estas colas. Para lograr encapsular y evitar la sentencia "extern".
+                        mole[i].last_time = 0;
+                    
+                        task_return = xTaskCreate(
+                            MOLE_ServiceLogic,
+                            (const char *)"MOLE",
+                            configMINIMAL_STACK_SIZE ,
+                            (void *) &mole[i],
+                            tskIDLE_PRIORITY + 1,
+                            &task_mole[i]
+                        );
+                        configASSERT(task_return == pdPASS);
+                    }
+                    wam.queue_time_out = xQueueCreate(QUEUE_SIZE, sizeof(print_info_t));
+                    configASSERT(wam.queue_time_out != NULL);
+                    wam.state = WAM_STATE_GAMEPLAY;
+                }
+                break;
 
-        case WAM_STATE_GAMEPLAY:
-            xQueueReceive(wam.event_queue, &print_info ,portMAX_DELAY);
-            wam.points += print_info.points;
-            print_info.points = wam.points;
-            if (print_info.event != EVENT_MISS) {
-                xQueueSend(wam.queue_time_out, &print_info, portMAX_DELAY);
-            }
-            xQueueSend(wam.print_queue, &print_info, portMAX_DELAY);
-            break;
-        case WAM_STATE_END:
-            vQueueDelete(wam.queue_time_out);
-            vTaskDelete(task_time_out);
-            for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
-                vTaskDelete(task_mole[i]);
-                vSemaphoreDelete(mole[i].semaphore);
-            }
-            wam.state = WAM_STATE_INIT;
-            break;
-        default:
-            break;
+            case WAM_STATE_GAMEPLAY:
+                xQueueReceive(wam.event_queue, &print_info ,portMAX_DELAY);
+                wam.points += print_info.points;
+                print_info.points = wam.points;
+                if (print_info.event != EVENT_MISS) {
+                    xQueueSend(wam.queue_time_out, &print_info, portMAX_DELAY);
+                }
+                xQueueSend(wam.print_queue, &print_info, portMAX_DELAY);
+                break;
+            case WAM_STATE_END:
+                vQueueDelete(wam.queue_time_out);
+                vTaskDelete(task_time_out);
+                for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
+                    vTaskDelete(task_mole[i]);
+                    vSemaphoreDelete(mole[i].semaphore);
+                }
+                wam.state = WAM_STATE_BOOTING;
+                break;
+            default:
+                break;
         }
     }
 }
@@ -227,7 +238,7 @@ void WHACKAMOLE_ServicePrint( void* taskParmPtr ) {
 }
 
 
-void WHACKAMOLE_ISRKeyPressed (t_key_isr_signal* event_data , uintptr_t context) {
+void WHACKAMOLE_ISRKeyPressedInGame (t_key_isr_signal* event_data , uintptr_t context) {
     mole_t * moles = (mole_t*)context;
     
     switch (event_data->tecla) {
@@ -248,5 +259,14 @@ void WHACKAMOLE_ISRKeyPressed (t_key_isr_signal* event_data , uintptr_t context)
     moles->last_time = tickRead();
     taskEXIT_CRITICAL();
     xSemaphoreGive(moles->semaphore);
+}
+
+
+void WHACKAMOLE_ISRKeyPressedOrReleasedInStart (t_key_isr_signal* event_data , uintptr_t context) {
+    QueueHandle_t* queue = (QueueHandle_t*) context;
+    print_info_t print_info;
+    print_info.event = EVENT_GAME_START;
+    print_info.points = 0;
+    xQueueSend(*queue, &print_info, portMAX_DELAY);
 }
 
