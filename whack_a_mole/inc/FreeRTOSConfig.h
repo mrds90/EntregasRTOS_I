@@ -1,19 +1,42 @@
-/*=============================================================================
- * Copyright (c) 2021, Franco Bucafusco <franco_bucafusco@yahoo.com.ar>
- * 					   Martin N. Menendez <mmenendez@fi.uba.ar>
+/* Copyright 2020, Franco Bucafusco
  * All rights reserved.
- * License: Free
- * Date: 2021/10/03
- * Version: v1.2
- *===========================================================================*/
-
-
+ *
+ * This file is part of sAPI Library.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ *    contributors may be used to endorse or promote products derived from this
+ *    software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
 #include "chip.h"
 
 #define configUSE_PREEMPTION                         1
+#define configUSE_TIME_SLICING                       1
+
 
 #define configUSE_TICKLESS_IDLE                      0
 
@@ -21,12 +44,12 @@
 #define configTICK_RATE_HZ                           ( ( TickType_t ) 1000 ) // 1000 ticks per second => 1ms tick rate
 #define configMAX_PRIORITIES                         ( 7 )
 #define configMINIMAL_STACK_SIZE                     90
-#define configTOTAL_HEAP_SIZE                        ( ( size_t ) ( 8 * 1024 ) )    /* 8Kbytes. */
+#define configTOTAL_HEAP_SIZE                        ( ( size_t ) ( 8 * 1024 ) )    /* 85 Kbytes. */
 #define configMAX_TASK_NAME_LEN                      ( 16 )
 #define configUSE_TRACE_FACILITY                     0
 #define configUSE_16_BIT_TICKS                       0
 #define configIDLE_SHOULD_YIELD                      1
-#define configUSE_MUTEXES                            1
+#define configUSE_MUTEXES                            0
 #define configQUEUE_REGISTRY_SIZE                    8
 
 #define configUSE_RECURSIVE_MUTEXES                  0
@@ -45,7 +68,7 @@
 #define configUSE_TICK_HOOK                          0
 
 // runtime checks
-#define configCHECK_FOR_STACK_OVERFLOW               2
+#define configCHECK_FOR_STACK_OVERFLOW               2                                        /* INCLUIRLO PARA MEDIR EL STACK  */
 
 // Add old API compatibility
 #define configENABLE_BACKWARD_COMPATIBILITY          1
@@ -63,15 +86,17 @@
 /* Set the following definitions to 1 to include the API function, or zero
  * to exclude the API function. */
 #define INCLUDE_vTaskPrioritySet                     0
-#define INCLUDE_uxTaskPriorityGet                    0
-#define INCLUDE_vTaskDelete                          0
+#define INCLUDE_uxTaskPriorityGet                    1
+#define INCLUDE_vTaskDelete                          1
 #define INCLUDE_vTaskCleanUpResources                0
-#define INCLUDE_vTaskSuspend                         0
-#define INCLUDE_vTaskDelayUntil                      1
+#define INCLUDE_vTaskSuspend                         1
+#define INCLUDE_vTaskDelayUntil                      0
 #define INCLUDE_vTaskDelay                           1
 #define INCLUDE_xTaskGetSchedulerState               0
 #define INCLUDE_xTimerPendFunctionCall               0
 #define INCLUDE_xSemaphoreGetMutexHolder             0
+#define INCLUDE_uxTaskGetStackHighWaterMark          1                                      /* INCLUIRLO PARA MEDIR EL STACK  */
+
 
 /* Cortex-M specific definitions. */
 #ifdef __NVIC_PRIO_BITS
@@ -163,7 +188,8 @@ void vMainPostStopProcessing( void );
 #ifdef __ICCARM__
 /* Logging task definitions. */
 extern void vMainUARTPrintString( char * pcString );
-void vLoggingPrintf( const char * pcFormat,  ... );
+void vLoggingPrintf( const char * pcFormat,
+                     ... );
 
 extern int iMainRand32( void );
 
@@ -175,12 +201,12 @@ extern int iMainRand32( void );
 
 
 
+
 /* Ensure stdint is only used by the compiler, and not the assembler. */
 #if defined( __ICCARM__ ) || defined( __ARMCC_VERSION )
 #include <stdint.h>
 extern uint32_t SystemCoreClock;
 extern int DbgConsole_Printf( const char *fmt_s, ... );
 #endif
-
 
 #endif /* FREERTOS_CONFIG_H */

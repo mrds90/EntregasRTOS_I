@@ -32,7 +32,40 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 #pragma once
+#include <stdint.h>
+#include "FreeRTOS.h"
+#include "task.h"
+#include "queue.h"
+/*=====[Definitions of public data types]====================================*/
+typedef enum {
+   EVENT_WAKE_UP,
+   EVENT_GAME_START,
+   EVENT_HIT,
+   EVENT_FAIL,
+   EVENT_MISS,
+   EVENT_GAME_OVER,
+} event_t;
 
+typedef struct {
+    event_t event;
+    int16_t points;
+} print_info_t;
 
+typedef enum {
+    WAM_STATE_INIT,
+    WAM_STATE_GAMEPLAY,
+    WAM_STATE_END
+} wam_state_t;
+
+typedef struct {   
+    wam_state_t        state;
+    int16_t            points;
+    QueueHandle_t      print_queue;
+    QueueHandle_t      event_queue;
+    QueueHandle_t      queue_time_out;
+
+} wack_a_mole_t;
+
+/*=====[Prototypes (declarations) of public functions]=======================*/
 
 void WHACKAMOLE_Init();

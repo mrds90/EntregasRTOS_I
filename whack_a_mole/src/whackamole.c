@@ -37,84 +37,33 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 #include "FreeRTOS.h"
-#include "FreeRTOSConfig.h"
+#include "../inc/FreeRTOSConfig.h"
 #include "task.h"
 #include "queue.h"
 
 #include "../inc/keys.h"
-#include "whackamole.h"
-#include "random.h"
+#include "../inc/mole.h"
+#include "../inc/whackamole.h"
+
 
 /* private macros */
 
-#define WAM_GAMEPLAY_TIMEOUT        15000   //gameplay time
-#define WAM_MOLE_SHOW_MAX_TIME      6000
-#define WAM_MOLE_OUTSIDE_MAX_TIME   2000
-#define WAM_MOLE_SHOW_MIN_TIME      1000
-#define WAM_MOLE_OUTSIDE_MIN_TIME   500
-#define QUEUE_SIZE                  10
+#define WAM_GAMEPLAY_TIMEOUT        2000//15000   //gameplay time
 
-#define MISS_SCORE					-10
-#define NO_MOLE_SCORE				-20
+#define QUEUE_SIZE                  3
 
 #define MOLE_KEY(x)                 (x) + TEC1
 #define MOLE_LED(x)                 (x) + LEDB
 
 /* private types */
-typedef enum {
-    EVENT_WAKE_UP,
-    EVENT_GAME_START,
-    EVENT_HIT,
-    EVENT_FAIL,
-    EVENT_MISS,
-    EVENT_GAME_OVER,
-}event_t;
-typedef enum {
-    WAM_STATE_INIT,
-    WAM_STATE_GAMEPLAY,
-    WAM_STATE_END
-} wam_state_t;
-
-typedef struct {   
-    wam_state_t        state;
-    int16_t            points;
-    QueueHandle_t      print_queue;
-    QueueHandle_t      event_queue;
-} wack_a_mole_t;
-
-typedef struct {
-    event_t event;
-    int16_t points;
-} print_info_t;
-typedef struct {
-    gpioMap_t           key;
-    gpioMap_t           led;                //led asociado al mole
-    xSemaphoreHandle    semaphore;          //semaforo para controlar el acceso al mole
-    xQueueHandle        report_queue;       //Cola por donde reporta lo sucedido
-    TickType_t          last_time;          //ultima vez que se golpeo el mole
-    //otros recursos para cada mole
-} mole_t;
-
-typedef enum {
-    WAM_MOLE_1,
-    WAM_MOLE_2,
-    WAM_MOLE_3,
-    WAM_MOLE_4,
-
-    WAM_MOLE_QTY
-} mole_index_t;
 
 
 
 /* private prototypes */
-static void WHACKAMOLE_ServiceLogic( void * pvParameters );
-static void MOLE_ServiceLogic( void * pvParameters );
-static void whackamole_service_logic( uintptr_t pvParameters );
-static void WHACKAMOLE_ServicePrint( void* taskParmPtr );
-static void WHACKAMOLE_ISRKeyPressed (t_key_isr_signal* event_data , uintptr_t context);
-/* global objects  */
-
-static mole_t mole[WAM_MOLE_QTY];
+void WHACKAMOLE_ServiceLogic( void * pvParameters );
+void WHACKAMOLE_TimeOutControl(void* taskParmPtr);
+void WHACKAMOLE_ServicePrint( void* taskParmPtr );
+void WHACKAMOLE_ISRKeyPressed (t_key_isr_signal* event_data , uintptr_t context);
 
  
 
@@ -127,153 +76,126 @@ void WHACKAMOLE_Init() {
     BaseType_t main_logic = xTaskCreate(
             WHACKAMOLE_ServiceLogic,
             (const char *)"WAM",
-            configMINIMAL_STACK_SIZE,
+            configMINIMAL_STACK_SIZE * 2,
             NULL,
             tskIDLE_PRIORITY + 1,
             NULL
     );
     configASSERT(main_logic == pdPASS);
-    
-    
 
 }
-
-
-/**
-   @brief devuelve el puntaje de haber martillado al mole
-
-   @param tiempo_afuera             tiempo q hubiera estado el mole esperando
-   @param tiempo_reaccion_usuario   tiempo de reaccion del usuario en martillar
-   @return uint32_t
- */
-__STATIC_FORCEINLINE int32_t whackamole_points_success( TickType_t tiempo_afuera,TickType_t tiempo_reaccion_usuario ) {
-    return ( WAM_MOLE_OUTSIDE_MAX_TIME*WAM_MOLE_OUTSIDE_MAX_TIME ) /( tiempo_afuera*tiempo_reaccion_usuario );
-}
-
-/**
-   @brief devuelve el puntaje por haber perdido al mole
-
-   @return uint32_t
- */
-__STATIC_FORCEINLINE int32_t whackamole_points_miss(void) {
-    return MISS_SCORE;
-}
-
-/**
-   @brief devuelve el puntaje por haber martillado cuando no habia mole
-
-   @return uint32_t
- */
-__STATIC_FORCEINLINE uint32_t whackamole_points_no_mole(void) {
-    return NO_MOLE_SCORE;
-}
-
 /**
    @brief servicio principal del juego
 
    @param pvParameters
  */
-static void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
+void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
     static wack_a_mole_t wam;
-    BaseType_t game_continue;
+    static mole_t mole[WAM_MOLE_QTY];
+    static TaskHandle_t task_mole[WAM_MOLE_QTY];
+    static TaskHandle_t task_time_out = NULL;
     print_info_t print_info;
+    BaseType_t task_return;
+    
     wam.event_queue = xQueueCreate(QUEUE_SIZE,sizeof(print_info_t));
     configASSERT(wam.event_queue != NULL);
+    
     wam.print_queue = xQueueCreate(QUEUE_SIZE, sizeof(print_info_t));
     configASSERT( wam.print_queue != NULL );
-    BaseType_t prt = xTaskCreate(
+    
+    task_return = xTaskCreate(
             WHACKAMOLE_ServicePrint,
             (const char *)"Print",
-            configMINIMAL_STACK_SIZE * 5,
+            configMINIMAL_STACK_SIZE * 3,
             (void*) wam.print_queue,
             tskIDLE_PRIORITY + 1,
             NULL
     );
-    configASSERT(prt == pdPASS);
-    BaseType_t res[WAM_MOLE_QTY];
-    for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
-        mole[i].key = MOLE_KEY(i);
-        mole[i].led = MOLE_LED(i);
-        mole[i].semaphore = xSemaphoreCreateBinary();
-        mole[i].report_queue = wam.event_queue;
-        configASSERT(mole[i].semaphore != NULL);
-        mole[i].last_time = 0;
-        res[i] = xTaskCreate(
-            MOLE_ServiceLogic,
-            (const char *)"MOLE",
-            configMINIMAL_STACK_SIZE,
-            (void *) &mole[i],
-            tskIDLE_PRIORITY + 1,
-            NULL
-        );
-        configASSERT(res[i] == pdPASS);
-    }
-
-    KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressed, (uintptr_t) &mole[0] );
+    configASSERT(task_return == pdPASS);
     
     while (1) {
+        switch (wam.state) {
+        case WAM_STATE_INIT:
+            
+            KEYS_LoadPressHandler( WHACKAMOLE_ISRKeyPressed, (uintptr_t) &mole[0] );
+            task_return = xTaskCreate(
+                WHACKAMOLE_TimeOutControl,
+                (const char *)"TimeOut",
+                configMINIMAL_STACK_SIZE,
+                (void *) &wam,
+                tskIDLE_PRIORITY + 1,
+                &task_time_out
+            );
+            configASSERT(task_return == pdPASS);
 
-        game_continue = xQueueReceive(wam.event_queue, &print_info ,WAM_GAMEPLAY_TIMEOUT);
-        if(game_continue == pdTRUE) {
+            for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
+                mole[i].key = MOLE_KEY(i);
+                mole[i].led = MOLE_LED(i);
+                
+                mole[i].semaphore = xSemaphoreCreateBinary();
+                configASSERT(mole[i].semaphore != NULL);
+                
+                mole[i].report_queue = wam.event_queue; //Observar que aca se igualan estas colas. Para lograr encapsular y evitar la sentencia "extern".
+                mole[i].last_time = 0;
+            
+                task_return = xTaskCreate(
+                    MOLE_ServiceLogic,
+                    (const char *)"MOLE",
+                    configMINIMAL_STACK_SIZE ,
+                    (void *) &mole[i],
+                    tskIDLE_PRIORITY + 1,
+                    &task_mole[i]
+                );
+                configASSERT(task_return == pdPASS);
+            }
+            wam.queue_time_out = xQueueCreate(QUEUE_SIZE, sizeof(print_info_t));
+            configASSERT(wam.queue_time_out != NULL);
+            wam.state = WAM_STATE_GAMEPLAY;
+            break;
+
+        case WAM_STATE_GAMEPLAY:
+            xQueueReceive(wam.event_queue, &print_info ,portMAX_DELAY);
             wam.points += print_info.points;
             print_info.points = wam.points;
-            xQueueSend(wam.print_queue,&print_info,portMAX_DELAY);
-        }
-        else {
-            print_info.event = EVENT_GAME_OVER;
-            print_info.points = wam.points;
-            xQueueSend(wam.print_queue,&print_info,portMAX_DELAY);
+            if (print_info.event != EVENT_MISS) {
+                xQueueSend(wam.queue_time_out, &print_info, portMAX_DELAY);
+            }
+            xQueueSend(wam.print_queue, &print_info, portMAX_DELAY);
+            break;
+        case WAM_STATE_END:
+            vQueueDelete(wam.queue_time_out);
+            vTaskDelete(task_time_out);
+            for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) {
+                vTaskDelete(task_mole[i]);
+                vSemaphoreDelete(mole[i].semaphore);
+            }
+            wam.state = WAM_STATE_INIT;
+            break;
+        default:
+            break;
         }
     }
-    
 }
 
-/**
-   @brief servicio instanciado de cada mole
-
-   @param pvParameters
- */
-void MOLE_ServiceLogic( void* pvParameters ) {   
-    print_info_t print_info = {0,0};
-    mole_t *this_mole = (( mole_t*)pvParameters);
-    TickType_t tiempo_aparicion;
-    TickType_t tiempo_afuera;
-    BaseType_t press_check;
-    event_t event;
-    while( 1 ) {
-        /* preparo el turno */
-        tiempo_aparicion = random( WAM_MOLE_SHOW_MIN_TIME, WAM_MOLE_SHOW_MAX_TIME );
-        tiempo_afuera    = random( WAM_MOLE_OUTSIDE_MIN_TIME, WAM_MOLE_OUTSIDE_MAX_TIME );
-        press_check = xSemaphoreTake( this_mole->semaphore, pdMS_TO_TICKS(tiempo_aparicion));
-        if (press_check == pdTRUE) {
-            /*golpeo cuando no hay mole*/
-            print_info.points = whackamole_points_no_mole();
-            event = EVENT_FAIL;
+void WHACKAMOLE_TimeOutControl(void* taskParmPtr) {
+    BaseType_t time_out_check;
+    print_info_t print_info;
+    wack_a_mole_t* wam = (wack_a_mole_t*) taskParmPtr;
+    
+    while (1) {
+        time_out_check = xQueueReceive(wam->queue_time_out, &print_info ,WAM_GAMEPLAY_TIMEOUT);
+        if(time_out_check != pdTRUE) {
+            print_info.event = EVENT_GAME_OVER;
+            print_info.points = wam->points;
+            wam->state = WAM_STATE_END;
+            xQueueReset(wam->print_queue);
+            xQueueSend(wam->print_queue, &print_info, portMAX_DELAY);
         }
-        else {
-            tiempo_aparicion = tickRead(); //tiempo actual (reciclo variable)
-            /* muestro el mole */
-            gpioWrite(this_mole->led, ON);
-            press_check = xSemaphoreTake(this_mole->semaphore, pdMS_TO_TICKS(tiempo_afuera));
-            if (press_check == pdTRUE) {
-                /*golpeo cuando hay mole*/
-                print_info.points = whackamole_points_success(tiempo_afuera,  this_mole->last_time - tiempo_aparicion);
-                print_info.event = EVENT_HIT;
-            }
-            else {
-                /* no golpeo cuando hay mole */
-                print_info.points = whackamole_points_miss();
-                print_info.event = EVENT_MISS;
-            }
-            /* el mole, se vuelve a ocultar */
-            gpioWrite( this_mole->led, OFF );
-        }
-    xQueueSend(this_mole->report_queue,&print_info,portMAX_DELAY);
     }
 }
 
 void WHACKAMOLE_ServicePrint( void* taskParmPtr ) {
-    xQueueHandle print_queue = (xQueueHandle) taskParmPtr;
+    QueueHandle_t print_queue = (QueueHandle_t) taskParmPtr;
     print_info_t game;
     char str[100];
     while( 1 ) {
@@ -281,25 +203,26 @@ void WHACKAMOLE_ServicePrint( void* taskParmPtr ) {
         switch (game.event) {
             case EVENT_WAKE_UP:
                 sprintf( str, "Presione cualquier tecla por un rato r\n");
-                uartWriteString(UART_USB, str);
                 break;
             case EVENT_GAME_START:
                 sprintf( str, "A GOLPEAR! r\n" );
-                uartWriteString(UART_USB, str);
                 break;
             case EVENT_HIT:
-                sprintf( str, "HIT! Tu puntaje: %i.\r\n", game.points);
-                uartWriteString(UART_USB, str);
+                sprintf( str, "HIT! - Score: %i.\r\n", game.points);
                 break;
             case EVENT_MISS:
-                sprintf( str, "MISS! Tu puntaje: %i.\r\n", game.points);
-                uartWriteString(UART_USB, str);
+                sprintf( str, "MISS! - Score: %i.\r\n", game.points);
+                break;
+            case EVENT_FAIL:
+                sprintf( str, "NOTHING THERE! - Score: %i.\r\n", game.points);
                 break;
             case EVENT_GAME_OVER:
-                sprintf( str, "JUEGO TERMINADO: Tu puntaje final es %i.\r\n", game.points);
-                uartWriteString(UART_USB, str);
+                sprintf( str, "JUEGO TERMINADO: - Score: %i.\r\n", game.points);
+                
                 break;
             }
+
+        uartWriteString(UART_USB, str);
     }
 }
 
@@ -324,6 +247,6 @@ void WHACKAMOLE_ISRKeyPressed (t_key_isr_signal* event_data , uintptr_t context)
     taskENTER_CRITICAL();
     moles->last_time = tickRead();
     taskEXIT_CRITICAL();
-    xSemaphoreGive(mole[event_data->tecla].semaphore);
+    xSemaphoreGive(moles->semaphore);
 }
 
