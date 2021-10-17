@@ -66,28 +66,33 @@ __STATIC_FORCEINLINE uint32_t whackamole_points_no_mole(void);
 void MOLE_ServiceLogic( void* pvParameters ) {   
     print_info_t print_info = {0,0};
     mole_t *this_mole = (( mole_t*)pvParameters);
-    TickType_t tiempo_aparicion;
+    TickType_t tiempo_aparicion = 0;
     TickType_t tiempo_afuera;
+    TickType_t tiempo_auxiliar;
     BaseType_t press_check;
     while( 1 ) {
         /* preparo el turno */
-        
-        tiempo_aparicion = random( WAM_MOLE_SHOW_MIN_TIME, WAM_MOLE_SHOW_MAX_TIME ); // tiempo de aparicion aleatorio
-        tiempo_afuera    = random( WAM_MOLE_OUTSIDE_MIN_TIME, WAM_MOLE_OUTSIDE_MAX_TIME ); // tiempo de afuera aleatorio
+        if (tiempo_aparicion == 0) {
+            tiempo_aparicion = random( WAM_MOLE_SHOW_MIN_TIME, WAM_MOLE_SHOW_MAX_TIME ); // tiempo de aparicion aleatorio
+        }
+        tiempo_auxiliar = tickRead(); // tiempo actual
         press_check = xSemaphoreTake( this_mole->semaphore, pdMS_TO_TICKS(tiempo_aparicion)); // veo si el usuario apreta el boton sin mole activo (el handler de presionado de la tecla da este semaforo)
         if (press_check == pdTRUE) { // si el usuario apreto antes de que aparezca el mole
             /*golpeo cuando no hay mole*/
+            tiempo_aparicion -= tickRead() - tiempo_auxiliar; // Estrategia para conservar el tiempo de aparicion constante
             print_info.points = whackamole_points_no_mole();
             print_info.event = EVENT_FAIL;
         }
         else {
-            tiempo_aparicion = tickRead(); //tiempo actual (reciclo variable)
+            tiempo_aparicion = 0; // reseteo el tiempo de aparicion
+            tiempo_afuera    = random( WAM_MOLE_OUTSIDE_MIN_TIME, WAM_MOLE_OUTSIDE_MAX_TIME ); // tiempo de afuera aleatorio
+            tiempo_auxiliar = tickRead(); //tiempo actual 
             /* muestro el mole */
             gpioWrite(this_mole->led, ON); // enciendo el led del mole
             press_check = xSemaphoreTake(this_mole->semaphore, pdMS_TO_TICKS(tiempo_afuera)); // espero a que el usuario apriete (el handler de presionado de la tecla da este semaforo)
             if (press_check == pdTRUE) { // si el usuario acerto al mole
                 /*golpeo cuando hay mole*/
-                print_info.points = whackamole_points_success(tiempo_afuera,  this_mole->last_time - tiempo_aparicion); // calculo los puntos
+                print_info.points = whackamole_points_success(tiempo_afuera,  this_mole->last_time - tiempo_auxiliar); // calculo los puntos
                 print_info.event = EVENT_HIT; // marco el evento
             }
             else {
