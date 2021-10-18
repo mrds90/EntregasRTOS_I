@@ -361,14 +361,21 @@ void WHACKAMOLE_ISRKeyPressedInGame (t_key_isr_signal* event_data , uintptr_t co
     taskEXIT_CRITICAL();
     
     xSemaphoreGiveFromISR(moles->semaphore, &pxHigherPriorityTaskWoken);
-    portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
+    if(pxHigherPriorityTaskWoken == pdTRUE) {
+        portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
+    }
+    
 }
 
 void WHACKAMOLE_ISRKeyPressedOrReleasedInStart (t_key_isr_signal* event_data , uintptr_t context) {
     QueueHandle_t* queue = (QueueHandle_t*) context;
+    BaseType_t pxHigherPriorityTaskWoken  = pdFALSE;
     print_info_t print_info;
     print_info.event = EVENT_GAME_START;
     print_info.points = 0;
-    xQueueSend(*queue, &print_info, portMAX_DELAY);
+    xQueueSendFromISR( *queue, &print_info, &pxHigherPriorityTaskWoken );
+    if(pxHigherPriorityTaskWoken == pdTRUE) {
+        portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
+    }
 }
 
