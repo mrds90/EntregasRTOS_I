@@ -15,7 +15,12 @@
 #include "../inc/keys.h"
 
 /*=====[ Definitions of private data types ]===================================*/
+typedef enum {
+    KEY_PRESSED,
+    KEY_RELEASED,
 
+    KEY_EVENTS_QTY
+} key_event_t;
 /*=====[Definition macros of private constants]==============================*/
 #define DEBOUNCE_TIME   40
 #define DEBOUNCE_TIME_TICKS     pdMS_TO_TICKS(DEBOUNCE_TIME)
@@ -38,7 +43,7 @@ xQueueHandle isr_queue; //almacenara el evento en una cola
 
 USER_KEYS_EVENT_HANDLER_BUTTON_PRESSED_t user_keys_event_handler_button_pressed  = NULL;
 USER_KEYS_EVENT_HANDLER_BUTTON_RELEASED_t user_keys_event_handler_button_release = NULL;
-uintptr_t context;
+uintptr_t context[KEY_EVENTS_QTY];
 
 /*=====[Definitions of public global variables]==============================*/
 
@@ -118,12 +123,12 @@ void KEYS_Init( void ) {
 
 void KEYS_LoadPressHandler( USER_KEYS_EVENT_HANDLER_BUTTON_PRESSED_t press_handler, uintptr_t this_context ) {
     user_keys_event_handler_button_pressed = press_handler;
-    context = this_context;
+    context[KEY_PRESSED] = this_context;
 }
 
 void KEYS_LoadReleaseHandler( USER_KEYS_EVENT_HANDLER_BUTTON_RELEASED_t release_handler, uintptr_t this_context ) {
     user_keys_event_handler_button_release = release_handler;
-    context = this_context;
+    context[KEY_RELEASED] = this_context;
 }
 
 /**
@@ -194,7 +199,7 @@ static void KEYS_ISRButonPressed( t_key_isr_signal* event_data ) {
 
     //user event
     if( user_keys_event_handler_button_pressed != NULL ) {
-        user_keys_event_handler_button_pressed( event_data, context );
+        user_keys_event_handler_button_pressed( event_data, context[KEY_PRESSED] );
     }
 }
 
@@ -214,7 +219,7 @@ static void KEYS_ISRButonReleased( t_key_isr_signal* event_data )
     taskEXIT_CRITICAL();
 
     if (user_keys_event_handler_button_release != NULL) {
-        user_keys_event_handler_button_release( event_data, context );
+        user_keys_event_handler_button_release( event_data, context[KEY_RELEASED] );
     }
 }
 
