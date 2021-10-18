@@ -53,7 +53,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* private macros */
 
 #define WAM_GAMEPLAY_TIMEOUT        15000   //gameplay time
-#define WAM_GAME_END_DELAY          20000   //delay to end game
+#define WAM_GAME_END_DELAY          20000   //delay to end game 
 #define WAM_GAME_INIT_DELAY         500    //mole timeout
 #define QUEUE_SIZE                  3
 
@@ -316,10 +316,10 @@ void WHACKAMOLE_ServicePrint( void* taskParmPtr ) {
         xQueueReceive(print_queue, &game, portMAX_DELAY);
         switch (game.event) {
             case EVENT_WAKE_UP:
-                sprintf( str, "Presione cualquier tecla por un rato r\n");
+                sprintf( str, "Presione cualquier tecla por un rato \r\n");
                 break;
             case EVENT_GAME_START:
-                sprintf( str, "A GOLPEAR! r\n" );
+                sprintf( str, "A GOLPEAR! \r\n" );
                 break;
             case EVENT_HIT:
                 sprintf( str, "HIT! - Score: %i.\r\n", game.points);
