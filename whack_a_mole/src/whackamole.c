@@ -279,8 +279,7 @@ void WHACKAMOLE_TimeOutControl(void* taskParmPtr) {
     wack_a_mole_t* wam = (wack_a_mole_t*) taskParmPtr;
     
     while (1) {
-        // time_out_check = xQueueReceive(wam->semph_time_out, &print_info ,WAM_GAMEPLAY_TIMEOUT);
-        time_out_check = xSemaphoreTake(wam->semph_time_out, portMAX_DELAY);
+        time_out_check = xSemaphoreTake(wam->semph_time_out, WAM_GAMEPLAY_TIMEOUT);
         if(time_out_check != pdTRUE) {
             KEYS_LoadPressHandler( NULL, 0);
             print_info.event = EVENT_GAME_OVER;
