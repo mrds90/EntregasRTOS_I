@@ -180,7 +180,7 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                         (const char *)"TimeOut",
                         configMINIMAL_STACK_SIZE,
                         (void *) &wam,
-                        tskIDLE_PRIORITY + 2,
+                        tskIDLE_PRIORITY + 1,
                         &task_time_out
                     );
                     task_return = xTaskCreate( // Se Crea tarea que controla el tiempo de juego
@@ -188,18 +188,18 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                         (const char *)"End Control",
                         configMINIMAL_STACK_SIZE,
                         (void *) &wam,
-                        tskIDLE_PRIORITY + 2,
+                        tskIDLE_PRIORITY + 1,
                         &task_end_game
                     );
                     configASSERT(task_return == pdPASS);
 
                     for (mole_index_t i = 0; i < WAM_MOLE_QTY; i++) { //Se inicializan las moles
-#ifdef TEC_2_BROKEN         
-                        if (i != WAM_MOLE_2) {
-#endif
                             mole[i].key = MOLE_KEY(i);
                             mole[i].led = MOLE_LED(i);
                             
+#ifdef TEC_2_BROKEN         
+                        if (i != WAM_MOLE_2) {
+#endif
                             mole[i].semaphore = xSemaphoreCreateBinary();
                             configASSERT(mole[i].semaphore != NULL);
                             
@@ -211,7 +211,7 @@ void WHACKAMOLE_ServiceLogic( void * pvParameters ) {
                                 (const char *)"MOLE",
                                 configMINIMAL_STACK_SIZE ,
                                 (void *) &mole[i],
-                                tskIDLE_PRIORITY + 1,
+                                tskIDLE_PRIORITY + 2,
                                 &task_mole[i]
                             );
                             configASSERT(task_return == pdPASS);
@@ -334,7 +334,6 @@ void WHACKAMOLE_ServicePrint( void* taskParmPtr ) {
                 
                 break;
             }
-
         uartWriteString(UART_USB, str);
     }
 }
@@ -360,10 +359,7 @@ void WHACKAMOLE_ISRKeyPressedInGame (t_key_isr_signal* event_data , uintptr_t co
     moles->last_time = tickRead();
     taskEXIT_CRITICAL();
     
-    xSemaphoreGiveFromISR(moles->semaphore, &pxHigherPriorityTaskWoken);
-    if(pxHigherPriorityTaskWoken == pdTRUE) {
-        portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
-    }
+    xSemaphoreGive(moles->semaphore);
     
 }
 
@@ -373,9 +369,6 @@ void WHACKAMOLE_ISRKeyPressedOrReleasedInStart (t_key_isr_signal* event_data , u
     print_info_t print_info;
     print_info.event = EVENT_GAME_START;
     print_info.points = 0;
-    xQueueSendFromISR( *queue, &print_info, &pxHigherPriorityTaskWoken );
-    if(pxHigherPriorityTaskWoken == pdTRUE) {
-        portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
-    }
+    xQueueSend(*queue, &print_info, portMAX_DELAY);
 }
 
