@@ -20,10 +20,10 @@
 #include "../inc/whackamole.h"
 #include "../inc/mole.h"
 /*=====[Definition macros of private constants]==============================*/
-#define WAM_MOLE_SHOW_MAX_TIME      6000
-#define WAM_MOLE_OUTSIDE_MAX_TIME   2000
-#define WAM_MOLE_SHOW_MIN_TIME      1000
-#define WAM_MOLE_OUTSIDE_MIN_TIME   500
+#define WAM_MOLE_SHOW_MAX_TIME      pdMS_TO_TICKS(6000)
+#define WAM_MOLE_OUTSIDE_MAX_TIME   pdMS_TO_TICKS(2000)
+#define WAM_MOLE_SHOW_MIN_TIME      pdMS_TO_TICKS(1000)
+#define WAM_MOLE_OUTSIDE_MIN_TIME   pdMS_TO_TICKS(500)
 
 #define MISS_SCORE					-10
 #define NO_MOLE_SCORE				-20
