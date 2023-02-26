@@ -1,5 +1,6 @@
-# Template para resolucion de Whack a Mole
+# Whack a Mole para EDU-CIAA
 
-* No compila. La idea es que se usen los archivos de este template sobre algun ejemplo funcional de base.
-* Solamente posee archivos relacionados con el juego, y no incluye configuracion de freertos ni drivers. 
+* Prende leds de manera aleatoria y debe presionarse el botón asociado al led para apagar el mismo. 
+* Presionar de forma erronea resta puntaje.
+* Entre mas rápido presiona la tecla cuando enciende el led mas puntaje suma.
  
