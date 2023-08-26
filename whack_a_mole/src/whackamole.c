@@ -53,7 +53,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* private macros */
 
 #define WAM_GAMEPLAY_TIMEOUT        15000   //gameplay time
-#define WAM_GAME_END_DELAY          20000   //delay to end game 
+#define WAM_GAME_END_DELAY          30000   //delay to end game 
 #define WAM_GAME_INIT_DELAY         500    //mole timeout
 #define QUEUE_SIZE                  3
 
